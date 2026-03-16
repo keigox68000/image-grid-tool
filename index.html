@@ -41,7 +41,6 @@
     <script type="text/babel">
         const { useState, useRef, useEffect, useCallback } = React;
 
-        // アイコンコンポーネント (外部ライブラリなしで動作するようにSVGで定義)
         const Icons = {
             Upload: () => (
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
@@ -75,6 +74,9 @@
             ),
             CheckCircle: () => (
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            ),
+            Info: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
             )
         };
 
@@ -84,15 +86,17 @@
             const [images, setImages] = useState([]);
             const [cols, setCols] = useState(5);
             const [totalWidth, setTotalWidth] = useState(2000); 
+            const [quality, setQuality] = useState(0.9);
             const [format, setFormat] = useState('image/jpeg'); 
             const [draggedIndex, setDraggedIndex] = useState(null);
             const [isProcessing, setIsProcessing] = useState(false);
             const [previewUrl, setPreviewUrl] = useState(null);
             const [isOver, setIsOver] = useState(false);
             const [isSaved, setIsSaved] = useState(false);
+            const [recommendedWidth, setRecommendedWidth] = useState(0);
             const canvasRef = useRef(null);
 
-            // 設定の読み込み
+            // 初期設定の読み込み
             useEffect(() => {
                 const saved = localStorage.getItem(STORAGE_KEY);
                 if (saved) {
@@ -101,19 +105,43 @@
                         if (data.cols) setCols(data.cols);
                         if (data.totalWidth) setTotalWidth(data.totalWidth);
                         if (data.format) setFormat(data.format);
+                        if (data.quality) setQuality(data.quality);
                     } catch (e) { console.error(e); }
                 }
             }, []);
 
-            // 設定の保存
+            // 設定の自動保存
             useEffect(() => {
                 const timer = setTimeout(() => {
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cols, totalWidth, format }));
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cols, totalWidth, format, quality }));
                     setIsSaved(true);
                     setTimeout(() => setIsSaved(false), 2000);
                 }, 1000);
                 return () => clearTimeout(timer);
-            }, [cols, totalWidth, format]);
+            }, [cols, totalWidth, format, quality]);
+
+            // 画像のサイズから推奨される合計横幅を計算
+            useEffect(() => {
+                if (images.length === 0) {
+                    setRecommendedWidth(0);
+                    return;
+                }
+                
+                // すべての画像の元の横幅を合計し、平均を取る（簡易的な計算）
+                // 実際は行ごとに異なる場合があるが、最初の行の合計を推奨値とする
+                const firstRow = images.slice(0, cols);
+                const calcWidth = async () => {
+                    const sizes = await Promise.all(
+                        firstRow.map(img => new Promise(res => {
+                            const i = new Image();
+                            i.onload = () => res(i.width);
+                            i.src = img.url;
+                        }))
+                    );
+                    setRecommendedWidth(sizes.reduce((a, b) => a + b, 0));
+                };
+                calcWidth();
+            }, [images, cols]);
 
             const handleFiles = useCallback((files) => {
                 const newImages = Array.from(files)
@@ -176,44 +204,33 @@
                         }))
                     );
 
-                    // --- 新しいロジック：アスペクト比を維持してグリッドを作成 ---
                     const rowData = [];
                     let firstRowHeight = 0;
 
-                    // 1. 画像を列数に合わせて行に分割する
                     for (let i = 0; i < loadedImages.length; i += cols) {
                         const chunk = loadedImages.slice(i, i + cols);
-                        
-                        // その行の画像のアスペクト比(w/h)の合計を計算
                         const sumRatios = chunk.reduce((sum, img) => sum + (img.width / img.height), 0);
-                        
-                        // その行をtotalWidthにぴったり合わせるための共通の高さを計算
-                        // Formula: RowHeight = TotalWidth / Sum(AspectRatios)
                         let rowHeight = totalWidth / sumRatios;
                         
-                        // 最初の行の高さを基準として保存（不完全な最終行のため）
                         if (i === 0) firstRowHeight = rowHeight;
-
-                        // もし最終行で、かつ指定列数より少ない場合は、
-                        // 巨大化を防ぐため「最初の行の高さ」または「平均的な高さ」を適用する
                         if (chunk.length < cols && i !== 0) {
                             rowHeight = firstRowHeight;
                         }
 
-                        rowData.push({
-                            images: chunk,
-                            height: rowHeight
-                        });
+                        rowData.push({ images: chunk, height: rowHeight });
                     }
 
-                    // 2. キャンバスの最終的な高さを計算
                     const finalCanvasHeight = rowData.reduce((sum, row) => sum + row.height, 0);
-                    
                     const canvas = canvasRef.current;
                     canvas.width = totalWidth;
                     canvas.height = Math.round(finalCanvasHeight);
                     
                     const ctx = canvas.getContext('2d', { alpha: format === 'image/png' });
+                    
+                    // 高品質なサンプリング設定
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+
                     if (format === 'image/jpeg') {
                         ctx.fillStyle = '#ffffff';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -221,20 +238,25 @@
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
                     }
 
-                    // 3. 画像を描画
                     let currentY = 0;
                     rowData.forEach((row) => {
                         let currentX = 0;
                         row.images.forEach((img) => {
-                            // アスペクト比を維持した幅を計算
                             const drawWidth = row.height * (img.width / img.height);
-                            ctx.drawImage(img, Math.round(currentX), Math.round(currentY), Math.round(drawWidth), Math.round(row.height));
+                            ctx.drawImage(
+                                img, 
+                                Math.round(currentX), 
+                                Math.round(currentY), 
+                                Math.round(drawWidth), 
+                                Math.round(row.height)
+                            );
                             currentX += drawWidth;
                         });
                         currentY += row.height;
                     });
 
-                    setPreviewUrl(canvas.toDataURL(format, format === 'image/jpeg' ? 0.85 : undefined));
+                    // 指定された品質で書き出し
+                    setPreviewUrl(canvas.toDataURL(format, format === 'image/jpeg' ? quality : undefined));
                 } catch (error) {
                     console.error(error);
                 } finally {
@@ -249,7 +271,7 @@
                 } else {
                     setPreviewUrl(null);
                 }
-            }, [images, cols, totalWidth, format]);
+            }, [images, cols, totalWidth, format, quality]);
 
             const downloadImage = () => {
                 if (!previewUrl) return;
@@ -306,20 +328,44 @@
                                                 <span className="text-blue-600 font-bold">{cols} 列</span>
                                             </label>
                                             <input type="range" min="1" max="20" value={cols} onChange={(e) => setCols(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
-                                            <p className="text-[10px] text-slate-400 mt-1 italic">
-                                                ※ 1列にすると縦に並びます
-                                            </p>
                                         </div>
                                         <div>
-                                            <label className="flex justify-between text-sm font-medium text-slate-600 mb-2">
+                                            <label className="flex justify-between text-sm font-medium text-slate-600 mb-1">
                                                 <span>完成画像の合計横幅 (px)</span>
                                                 <div className="flex items-center gap-1 text-blue-600 font-bold">
                                                     <input type="number" value={totalWidth} onChange={(e) => setTotalWidth(Math.max(1, parseInt(e.target.value) || 0))} className="w-24 text-right bg-transparent border-b border-blue-200 focus:border-blue-600 outline-none" />
                                                     <span>px</span>
                                                 </div>
                                             </label>
-                                            <input type="range" min="300" max="8000" step="100" value={totalWidth} onChange={(e) => setTotalWidth(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                                            <input type="range" min="300" max="8000" step="10" value={totalWidth} onChange={(e) => setTotalWidth(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                                            
+                                            {recommendedWidth > 0 && (
+                                                <div className="mt-2 p-2 bg-blue-50 rounded text-[10px] text-blue-700 flex items-start gap-2">
+                                                    <div className="mt-0.5"><Icons.Info /></div>
+                                                    <div>
+                                                        <strong>劣化を防ぐ推奨サイズ: {recommendedWidth} px</strong>
+                                                        <p className="opacity-80">元の画像を拡大（引き延ばし）しない合計幅です。</p>
+                                                        <button 
+                                                            className="mt-1 text-blue-600 underline font-bold"
+                                                            onClick={() => setTotalWidth(recommendedWidth)}
+                                                        >
+                                                            推奨サイズを適用する
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
+
+                                        {format === 'image/jpeg' && (
+                                            <div>
+                                                <label className="flex justify-between text-sm font-medium text-slate-600 mb-2">
+                                                    <span>JPEG 品質 (圧縮率)</span>
+                                                    <span className="text-blue-600 font-bold">{Math.round(quality * 100)}%</span>
+                                                </label>
+                                                <input type="range" min="0.1" max="1.0" step="0.01" value={quality} onChange={(e) => setQuality(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                                            </div>
+                                        )}
+
                                         <div>
                                             <label className="block text-sm font-medium text-slate-600 mb-2">保存形式</label>
                                             <div className="flex bg-slate-100 p-1 rounded-xl">
