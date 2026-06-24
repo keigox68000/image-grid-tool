@@ -156,6 +156,8 @@
             const onDrop = (e) => {
                 e.preventDefault();
                 setIsOver(false);
+
+                // ドラッグ元がブラウザ外のファイル（ファイル追加）の場合のみ処理する
                 if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                     handleFiles(e.dataTransfer.files);
                 }
@@ -176,13 +178,17 @@
             };
 
             const handleDragStart = (e, index) => {
+                e.dataTransfer.effectAllowed = 'move';
                 e.dataTransfer.setData('text/plain', index);
                 setDraggedIndex(index);
             };
 
             const handleReorderDrop = (e, index) => {
                 e.preventDefault();
+                e.stopPropagation(); // ワークスペース全体の親onDropイベントに伝播するのを防ぐ
+                
                 if (draggedIndex === null || draggedIndex === index) return;
+                
                 const newImages = [...images];
                 const item = newImages.splice(draggedIndex, 1)[0];
                 newImages.splice(index, 0, item);
