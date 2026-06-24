@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image Grid Joiner Pro</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.20/babel.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.12/babel.min.js" crossorigin></script>
     <style>
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
@@ -93,7 +93,6 @@
             const [recommendedWidth, setRecommendedWidth] = useState(0);
             const canvasRef = useRef(null);
 
-            // 初期設定の読み込み
             useEffect(() => {
                 const saved = localStorage.getItem(STORAGE_KEY);
                 if (saved) {
@@ -107,7 +106,6 @@
                 }
             }, []);
 
-            // 設定の自動保存
             useEffect(() => {
                 const timer = setTimeout(() => {
                     localStorage.setItem(STORAGE_KEY, JSON.stringify({ cols, totalWidth, format, quality }));
@@ -117,14 +115,12 @@
                 return () => clearTimeout(timer);
             }, [cols, totalWidth, format, quality]);
 
-            // アンマウント時に全てのURLオブジェクトを解放
             useEffect(() => {
                 return () => {
                     images.forEach(img => URL.revokeObjectURL(img.url));
                 };
             }, []);
 
-            // 画像のサイズから推奨される合計横幅を計算
             useEffect(() => {
                 if (images.length === 0) {
                     setRecommendedWidth(0);
