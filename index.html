@@ -172,11 +172,15 @@
                 setImages(prev => [...prev, ...newImages]);
             }, []);
 
-            const onDrop = (e) => {
-                e.preventDefault();
+            const onDrop = (evt) => {
+                evt.preventDefault();
                 setIsOver(false);
-                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                    handleFiles(e.dataTransfer.files);
+
+                // ワークスペース内ドラッグ（typesにFilesが含まれない、またはDataTransferにファイルがゼロ個）なら処理を完全にスキップ
+                if (!evt.dataTransfer.types.includes('Files')) return;
+                
+                if (evt.dataTransfer.files && evt.dataTransfer.files.length > 0) {
+                    handleFiles(evt.dataTransfer.files);
                 }
             };
 
@@ -194,16 +198,18 @@
                 setPreviewUrl(null);
             };
 
-            const handleDragStart = (ev, index) => {
-                ev.dataTransfer.effectAllowed = 'move';
-                ev.dataTransfer.setData('text/plain', index);
+            const handleDragStart = (evt, index) => {
+                evt.dataTransfer.effectAllowed = 'move';
+                evt.dataTransfer.setData('text/plain', index.toString());
                 setDraggedIndex(index);
             };
 
-            const handleReorderDrop = (ev, index) => {
-                ev.preventDefault();
-                ev.stopPropagation();
+            const handleReorderDrop = (evt, index) => {
+                evt.preventDefault();
+                evt.stopPropagation(); // 親（ワークスペース）のonDropイベント発火を確実に防御
+                
                 if (draggedIndex === null || draggedIndex === index) return;
+                
                 const newImages = [...images];
                 const item = newImages.splice(draggedIndex, 1)[0];
                 newImages.splice(index, 0, item);
@@ -326,17 +332,17 @@
                                         e('label', { className: 'flex justify-between text-sm font-medium text-slate-600 mb-2' },
                                             e('span', null, '横方向の枚数 (列)'), e('span', { className: 'text-blue-600 font-bold' }, `${cols} 列`)
                                         ),
-                                        e('input', { type: 'range', min: 1, max: 20, value: cols, onChange: (e) => setCols(parseInt(e.target.value)), className: 'w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600' })
+                                        e('input', { type: 'range', min: 1, max: 20, value: cols, onChange: (ev) => setCols(parseInt(evt.target.value)), className: 'w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600' })
                                     ),
                                     e('div', null,
                                         e('label', { className: 'flex justify-between text-sm font-medium text-slate-600 mb-1' },
                                             e('span', null, '完成画像の合計横幅 (px)'),
                                             e('div', { className: 'flex items-center gap-1 text-blue-600 font-bold' },
-                                                e('input', { type: 'number', value: totalWidth, onChange: (e) => setTotalWidth(Math.max(1, parseInt(e.target.value) || 0)), className: 'w-24 text-right bg-transparent border-b border-blue-200 focus:border-blue-600 outline-none' }),
+                                                e('input', { type: 'number', value: totalWidth, onChange: (evt) => setTotalWidth(Math.max(1, parseInt(evt.target.value) || 0)), className: 'w-24 text-right bg-transparent border-b border-blue-200 focus:border-blue-600 outline-none' }),
                                                 e('span', null, 'px')
                                             )
                                         ),
-                                        e('input', { type: 'range', min: 300, max: 8000, step: 10, value: totalWidth, onChange: (e) => setTotalWidth(parseInt(e.target.value)), className: 'w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600' }),
+                                        e('input', { type: 'range', min: 300, max: 8000, step: 10, value: totalWidth, onChange: (evt) => setTotalWidth(parseInt(evt.target.value)), className: 'w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600' }),
                                         recommendedWidth > 0 && e('div', { className: 'mt-2 p-2 bg-blue-50 rounded text-[10px] text-blue-700 flex items-start gap-2' },
                                             e('div', { className: 'mt-0.5' }, e(Icons.Info)),
                                             e('div', null,
@@ -350,7 +356,7 @@
                                         e('label', { className: 'flex justify-between text-sm font-medium text-slate-600 mb-2' },
                                             e('span', null, 'JPEG 品質 (圧縮率)'), e('span', { className: 'text-blue-600 font-bold' }, `${Math.round(quality * 100)}%`)
                                         ),
-                                        e('input', { type: 'range', min: 0.1, max: 1.0, step: 0.01, value: quality, onChange: (e) => setQuality(parseFloat(e.target.value)), className: 'w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600' })
+                                        e('input', { type: 'range', min: 0.1, max: 1.0, step: 0.01, value: quality, onChange: (evt) => setQuality(parseFloat(evt.target.value)), className: 'w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600' })
                                     ),
                                     e('div', null,
                                         e('label', { className: 'block text-sm font-medium text-slate-600 mb-2' }, '保存形式'),
@@ -365,7 +371,7 @@
                         ),
                         e('div', { className: 'lg:col-span-2 space-y-6' },
                             e('div', {
-                                onDragOver: (e) => { e.preventDefault(); setIsOver(true); },
+                                onDragOver: (evt) => { evt.preventDefault(); setIsOver(true); },
                                 onDragLeave: () => setIsOver(false),
                                 onDrop: onDrop,
                                 className: `bg-white p-6 rounded-2xl shadow-sm border-2 border-dashed transition-all min-h-[300px] ${isOver ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200'}`
@@ -374,7 +380,7 @@
                                     e('span', null, 'ワークスペース'), e('span', { className: 'text-xs font-normal text-slate-400' }, 'ドロップして追加 / ドラッグして移動')
                                 ),
                                 images.length === 0 ? e('div', { className: 'flex flex-col items-center justify-center py-20 text-slate-400 group' },
-                                    e('input', { type: 'file', multiple: true, accept: 'image/*', onChange: (e) => handleFiles(e.target.files), className: 'hidden', id: 'initialInput' }),
+                                    e('input', { type: 'file', multiple: true, accept: 'image/*', onChange: (evt) => handleFiles(evt.target.files), className: 'hidden', id: 'initialInput' }),
                                     e('label', { htmlFor: 'initialInput', className: 'cursor-pointer text-center' },
                                         e('div', { className: 'bg-slate-100 text-slate-400 p-6 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center' }, e(Icons.Upload)),
                                         e('p', { className: 'font-bold text-slate-600' }, '画像をここにドロップ'),
@@ -384,9 +390,9 @@
                                     images.map((img, index) => e('div', {
                                         key: img.id,
                                         draggable: true,
-                                        onDragStart: (ev) => handleDragStart(ev, index),
-                                        onDragOver: (e) => e.preventDefault(),
-                                        onDrop: (ev) => handleReorderDrop(ev, index),
+                                        onDragStart: (evt) => handleDragStart(evt, index),
+                                        onDragOver: (evt) => evt.preventDefault(),
+                                        onDrop: (evt) => handleReorderDrop(evt, index),
                                         className: `relative aspect-square rounded-xl overflow-hidden border-2 transition-all cursor-move group shadow-sm bg-slate-50 ${draggedIndex === index ? 'opacity-30 border-blue-500 scale-95' : 'border-transparent hover:border-blue-400'}`
                                     },
                                         e('img', { src: img.url, alt: '', className: 'w-full h-full object-cover' }),
@@ -395,7 +401,7 @@
                                         e('div', { className: 'absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity' }, e(Icons.GripHorizontal))
                                     )),
                                     e('div', { className: 'aspect-square' },
-                                        e('input', { type: 'file', multiple: true, accept: 'image/*', onChange: (e) => handleFiles(e.target.files), className: 'hidden', id: 'addMoreInput' }),
+                                        e('input', { type: 'file', multiple: true, accept: 'image/*', onChange: (evt) => handleFiles(evt.target.files), className: 'hidden', id: 'addMoreInput' }),
                                         e('label', { htmlFor: 'addMoreInput', className: 'w-full h-full flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-500 cursor-pointer transition-all' },
                                             e(Icons.Plus), e('span', { className: 'text-[10px] font-bold mt-1' }, '追加')
                                         )
