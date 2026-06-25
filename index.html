@@ -97,6 +97,7 @@
         };
 
         const STORAGE_KEY = 'image-grid-joiner-settings';
+        const INTERNAL_DRAG_TYPE = 'application/x-app-image-index';
 
         const App = () => {
             const [images, setImages] = useState([]);
@@ -176,7 +177,11 @@
                 evt.preventDefault();
                 setIsOver(false);
 
-                // ワークスペース内ドラッグ（typesにFilesが含まれない、またはDataTransferにファイルがゼロ個）なら処理を完全にスキップ
+                // もしデータに「内部画像インデックス」が含まれていたら、追加処理を100%遮断する
+                if (evt.dataTransfer.types.includes(INTERNAL_DRAG_TYPE)) {
+                    return;
+                }
+
                 if (!evt.dataTransfer.types.includes('Files')) return;
                 
                 if (evt.dataTransfer.files && evt.dataTransfer.files.length > 0) {
@@ -200,20 +205,31 @@
 
             const handleDragStart = (evt, index) => {
                 evt.dataTransfer.effectAllowed = 'move';
+                // 内部ドラッグであることを確実にマークするカスタム型を登録
+                evt.dataTransfer.setData(INTERNAL_DRAG_TYPE, index.toString());
                 evt.dataTransfer.setData('text/plain', index.toString());
                 setDraggedIndex(index);
             };
 
             const handleReorderDrop = (evt, index) => {
                 evt.preventDefault();
-                evt.stopPropagation(); // 親（ワークスペース）のonDropイベント発火を確実に防御
+                evt.stopPropagation();
                 
-                if (draggedIndex === null || draggedIndex === index) return;
+                // 内部識別データ（INTERNAL_DRAG_TYPE）からインデックスを安全に復元
+                const rawIndex = evt.dataTransfer.getData(INTERNAL_DRAG_TYPE) || evt.dataTransfer.getData('text/plain');
+                const sourceIndex = rawIndex !== "" ? parseInt(rawIndex, 10) : draggedIndex;
+                
+                if (sourceIndex === null || sourceIndex === undefined || isNaN(sourceIndex) || sourceIndex === index) {
+                    setDraggedIndex(null);
+                    return;
+                }
                 
                 const newImages = [...images];
-                const item = newImages.splice(draggedIndex, 1)[0];
-                newImages.splice(index, 0, item);
-                setImages(newImages);
+                const item = newImages.splice(sourceIndex, 1)[0];
+                if (item) {
+                    newImages.splice(index, 0, item);
+                    setImages(newImages);
+                }
                 setDraggedIndex(null);
             };
 
@@ -332,7 +348,7 @@
                                         e('label', { className: 'flex justify-between text-sm font-medium text-slate-600 mb-2' },
                                             e('span', null, '横方向の枚数 (列)'), e('span', { className: 'text-blue-600 font-bold' }, `${cols} 列`)
                                         ),
-                                        e('input', { type: 'range', min: 1, max: 20, value: cols, onChange: (ev) => setCols(parseInt(evt.target.value)), className: 'w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600' })
+                                        e('input', { type: 'range', min: 1, max: 20, value: cols, onChange: (evt) => setCols(parseInt(evt.target.value)), className: 'w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600' })
                                     ),
                                     e('div', null,
                                         e('label', { className: 'flex justify-between text-sm font-medium text-slate-600 mb-1' },
@@ -377,9 +393,9 @@
                                 className: `bg-white p-6 rounded-2xl shadow-sm border-2 border-dashed transition-all min-h-[300px] ${isOver ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200'}`
                             },
                                 e('h2', { className: 'text-lg font-semibold mb-4 flex items-center justify-between' },
-                                    e('span', null, 'ワークスペース'), e('span', { className: 'text-xs font-normal text-slate-400' }, 'ドロップして追加 / ドラッグして移動')
+                                    e('span', null, 'ワークスペース'), e('span', { className: 'text-xs font-normal text-slate-400' }, '外からドロップで追加 / ドラッグで並び替え')
                                 ),
-                                images.length === 0 ? e('div', { className: 'flex flex-col items-center justify-center py-20 text-slate-400 group' },
+                                images.length === 0 ? e('div', { className: 'flex flex-col items-center justify-center py-20 text-slate-400' },
                                     e('input', { type: 'file', multiple: true, accept: 'image/*', onChange: (evt) => handleFiles(evt.target.files), className: 'hidden', id: 'initialInput' }),
                                     e('label', { htmlFor: 'initialInput', className: 'cursor-pointer text-center' },
                                         e('div', { className: 'bg-slate-100 text-slate-400 p-6 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center' }, e(Icons.Upload)),
